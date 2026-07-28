@@ -1,0 +1,6 @@
+node_modules
+.DS_Store
+.git
+.openai
+npm-debug.log
+yarn-error.log
