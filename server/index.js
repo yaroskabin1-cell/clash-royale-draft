@@ -18,7 +18,7 @@ const MAX_ROUNDS = 8;
 const MAX_BID = 10;
 const ROUND_CARD_COUNT = 4;
 const ROUND_DURATION_MS = 15 * 1000;
-const MAX_CHAMPIONS_PER_DECK = 0;
+const MAX_CHAMPIONS_PER_DECK = 2;
 const STEAL_UNLOCK_ROUND = Math.floor(MAX_ROUNDS / 2) + 1;
 const LOBBY_TTL_MS = 4 * 60 * 60 * 1000;
 const HEIST_TACTICS = new Map([
@@ -26,12 +26,16 @@ const HEIST_TACTICS = new Map([
   ["shield", { key: "shield", label: "Shield" }],
   ["gamble", { key: "gamble", label: "Gamble" }]
 ]);
-const STANDARD_RARITIES = new Set(["common", "rare", "epic", "legendary"]);
+const STANDARD_RARITIES = new Set(["common", "rare", "epic", "legendary", "champion"]);
 const STANDARD_TYPES = new Set(["troop", "building", "spell"]);
 const EVENT_CARD_KEYS = new Set([
+  "cannoneer",
+  "dagger-duchess",
   "party-hut",
   "party-rocket",
+  "princess-tower",
   "raging-prince",
+  "royal-chef",
   "santa-hog-rider",
   "super-archers",
   "super-ice-golem",
@@ -39,19 +43,36 @@ const EVENT_CARD_KEYS = new Set([
   "super-magic-archer",
   "super-mini-pekka",
   "super-witch",
-  "terry"
+  "terry",
+  "tower-princess"
 ]);
-const EVENT_CARD_PATTERN = /\b(super|santa|party|raging)\b/i;
+const EVENT_CARD_PATTERN = /\b(evolution|evolved|hero|super|santa|party|raging)\b/i;
 
 const FALLBACK_CARDS = [
-  { id: 26000000, key: "knight", name: "Knight", rarity: "common", elixir: 3, type: "Troop" },
-  { id: 26000001, key: "archers", name: "Archers", rarity: "common", elixir: 3, type: "Troop" },
-  { id: 28000000, key: "fireball", name: "Fireball", rarity: "rare", elixir: 4, type: "Spell" },
-  { id: 26000005, key: "minions", name: "Minions", rarity: "common", elixir: 3, type: "Troop" },
-  { id: 26000003, key: "giant", name: "Giant", rarity: "rare", elixir: 5, type: "Troop" },
-  { id: 26000014, key: "musketeer", name: "Musketeer", rarity: "rare", elixir: 4, type: "Troop" },
-  { id: 26000021, key: "hog-rider", name: "Hog Rider", rarity: "rare", elixir: 4, type: "Troop" },
-  { id: 28000011, key: "the-log", name: "The Log", rarity: "legendary", elixir: 2, type: "Spell" }
+  { id: 26000000, key: "knight", name: "Knight", rarity: "common", elixir: 3, type: "Troop", arena: 0 },
+  { id: 26000001, key: "archers", name: "Archers", rarity: "common", elixir: 3, type: "Troop", arena: 0 },
+  { id: 28000000, key: "fireball", name: "Fireball", rarity: "rare", elixir: 4, type: "Spell", arena: 0 },
+  { id: 26000005, key: "minions", name: "Minions", rarity: "common", elixir: 3, type: "Troop", arena: 0 },
+  { id: 26000003, key: "giant", name: "Giant", rarity: "rare", elixir: 5, type: "Troop", arena: 0 },
+  { id: 26000014, key: "musketeer", name: "Musketeer", rarity: "rare", elixir: 4, type: "Troop", arena: 0 },
+  { id: 26000021, key: "hog-rider", name: "Hog Rider", rarity: "rare", elixir: 4, type: "Troop", arena: 5 },
+  { id: 28000011, key: "the-log", name: "The Log", rarity: "legendary", elixir: 2, type: "Spell", arena: 11 }
+].map(normalizeCard);
+
+const VERIFIED_CARD_SUPPLEMENTS = [
+  { id: 26000093, key: "little-prince", name: "Little Prince", rarity: "champion", elixir: 3, type: "Troop", arena: 18 },
+  { id: 26000095, key: "goblin-demolisher", name: "Goblin Demolisher", rarity: "rare", elixir: 4, type: "Troop", arena: 12 },
+  { id: 26000096, key: "goblin-machine", name: "Goblin Machine", rarity: "legendary", elixir: 5, type: "Troop", arena: 12 },
+  { id: 26000097, key: "suspicious-bush", name: "Suspicious Bush", rarity: "rare", elixir: 2, type: "Troop", arena: 9 },
+  { id: 26000099, key: "goblinstein", name: "Goblinstein", rarity: "champion", elixir: 5, type: "Troop", arena: 18 },
+  { id: 26000101, key: "rune-giant", name: "Rune Giant", rarity: "epic", elixir: 4, type: "Troop", arena: 9 },
+  { id: 26000102, key: "berserker", name: "Berserker", rarity: "common", elixir: 2, type: "Troop", arena: 9 },
+  { id: 26000103, key: "boss-bandit", name: "Boss Bandit", rarity: "champion", elixir: 6, type: "Troop", arena: 17 },
+  { id: 26000106, key: "ronin", name: "Ronin", rarity: "legendary", elixir: 5, type: "Troop", arena: 14 },
+  { id: 28000023, key: "void", name: "Void", rarity: "epic", elixir: 3, type: "Spell", arena: 14 },
+  { id: 28000024, key: "goblin-curse", name: "Goblin Curse", rarity: "epic", elixir: 2, type: "Spell", arena: 16 },
+  { id: 28000025, key: "spirit-empress", name: "Spirit Empress", rarity: "legendary", elixir: 6, type: "Troop", arena: 15 },
+  { id: 28000026, key: "vines", name: "Vines", rarity: "epic", elixir: 3, type: "Spell", arena: 15 }
 ].map(normalizeCard);
 
 let cards = [];
@@ -73,7 +94,10 @@ app.get("/api/cards/status", (_req, res) => {
   res.json({
     loaded: cards.length,
     loadedAt: cardsLoadedAt,
-    source: cardsSource
+    source: cardsSource,
+    champions: cards.filter(isChampionCard).length,
+    maxChampionsPerDeck: MAX_CHAMPIONS_PER_DECK,
+    verifiedSupplements: VERIFIED_CARD_SUPPLEMENTS.length
   });
 });
 
@@ -243,7 +267,7 @@ io.on("connection", (socket) => {
       }
 
       if (!canPlayerReceiveCard(player, targetCard)) {
-        throw new Error("Diese Karte nutzt Spezialslots und kann nicht sauber importiert werden.");
+        throw new Error("Deine beiden Champion-Slots sind bereits belegt. Waehle eine andere Karte.");
       }
 
       if ((player.usedBids || []).includes(bid)) {
@@ -400,14 +424,15 @@ async function loadCards() {
           .filter(isStandardPlayableCard)
           .map(normalizeCard)
           .filter((card) => card.key && card.name);
+        const merged = mergeVerifiedCards(normalized, VERIFIED_CARD_SUPPLEMENTS);
 
-        if (!normalized.length) {
+        if (!merged.length) {
           throw new Error(`${url} returned no usable cards`);
         }
 
-        cards = normalized;
+        cards = merged;
         cardsLoadedAt = new Date().toISOString();
-        cardsSource = url;
+        cardsSource = `${url} + verified supplements`;
         loadingCards = null;
         return cards;
       } catch (error) {
@@ -417,13 +442,30 @@ async function loadCards() {
 
     throw new Error(errors.join(" | "));
   } catch (error) {
-    cards = FALLBACK_CARDS;
+    cards = mergeVerifiedCards(FALLBACK_CARDS, VERIFIED_CARD_SUPPLEMENTS);
     cardsLoadedAt = new Date().toISOString();
-    cardsSource = "fallback";
+    cardsSource = "fallback + verified supplements";
     loadingCards = null;
     console.warn(`Using fallback cards until RoyaleAPI is reachable: ${error.message}`);
     return cards;
   }
+}
+
+function mergeVerifiedCards(baseCards, supplementCards) {
+  const byKey = new Map();
+  const allCards = [...baseCards, ...supplementCards];
+
+  for (const card of allCards) {
+    if (!isStandardPlayableCard(card)) {
+      continue;
+    }
+
+    if (!byKey.has(card.key)) {
+      byKey.set(card.key, card);
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) => a.id - b.id || a.name.localeCompare(b.name));
 }
 
 function normalizeCard(card) {
@@ -625,7 +667,7 @@ function resolveRound(lobby) {
     if (!fallbackCard) {
       fallbackCard = drawReplacementCard(lobby, player, obtainedKeys);
       if (fallbackCard) {
-        entry.effect = appendEffect(entry.effect, "Ersatzkarte wegen Import-Limit");
+        entry.effect = appendEffect(entry.effect, "Ersatzkarte wegen Champion-Slots");
       }
     }
 

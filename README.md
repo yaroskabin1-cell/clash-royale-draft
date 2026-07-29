@@ -48,14 +48,14 @@ Use a Node/WebSocket host such as Render, Railway, Fly.io, or a VPS. Static host
 - There is no remaining-point restriction; only used and stolen value cards are unavailable.
 - Each bidding round has a 15-second timer.
 - Players who do not lock picks before the timer expires receive a random leftover card from the round pool.
-- Event, super, party, tower-troop, evolved, and non-arena cards are filtered out.
+- The card pool is kept at 122 standard Clash Royale cards. Event, super, party, tower-troop, hero, evolved, and non-arena cards are filtered out.
 - Bids reveal simultaneously after all connected players lock.
 - For each card, the highest untied effective bid among players targeting that card wins it.
 - Players who do not win their target receive one random leftover card from the round pool.
 - Every player receives exactly one card per round and finishes with an 8-card deck.
 - All eight rounds accept picks before the final deck evaluation begins.
-- Finished decks can be copied as current Clash Royale `copyDeck` import links or opened directly in Clash Royale on mobile.
-- Draft decks are kept Clash-import safe by excluding special-slot cards such as Champions from new random pools.
+- Finished decks can be opened directly in Clash Royale on mobile.
+- Champions are included again, limited to two per deck, and are automatically placed into Clash Royale import slots 2/3.
 
 ## Elixir Heist Tactics
 

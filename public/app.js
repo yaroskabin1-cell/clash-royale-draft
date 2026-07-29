@@ -138,22 +138,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "copy-deck") {
-    const player = getPlayerById(button.dataset.playerId);
-    const exportInfo = getDeckExportInfo(player?.deck || []);
-    if (!exportInfo.ok) {
-      state.error = exportInfo.reason || "Dieses Deck kann noch nicht als Clash-Link exportiert werden.";
-      render();
-      return;
-    }
-    await copyText(exportInfo.shareLink, "Import-Link kopiert", {
-      sheetText:
-        "Falls dein Browser die Zwischenablage blockiert: Link manuell kopieren und aus Safari, Chrome oder einem Chat heraus öffnen.",
-      openLink: exportInfo.appLink
-    });
-    return;
-  }
-
   if (action === "close-copy-sheet") {
     state.copySheet = null;
     state.error = "";
@@ -620,10 +604,10 @@ function renderBidding(lobby, me) {
         }" data-action="select-card" data-card-key="${escapeAttr(
           card.key
         )}" ${!canChoose || state.pending || championLocked ? "disabled" : ""} title="${
-          championLocked ? "Spezialslot-Karte ist fuer den Import deaktiviert" : ""
+          championLocked ? "Champion-Slots 2/3 sind bereits belegt" : ""
         }">
           <span class="selection-card-frame">${cardThumb(card, "Runden-Pool")}</span>
-          ${championLocked ? `<span class="selection-lock">Import-Limit</span>` : ""}
+          ${championLocked ? `<span class="selection-lock">Champion-Limit</span>` : ""}
         </button>
       `;
       }
@@ -794,7 +778,7 @@ function renderFinished(lobby) {
       (player) => {
         const exportInfo = getDeckExportInfo(player.deck);
         const canExport = exportInfo.ok;
-        const playerId = escapeAttr(player.id);
+        const displayDeck = canExport ? exportInfo.exportDeck : player.deck;
         return `
         <article class="final-card ${player.id === state.playerId ? "self" : ""}">
           <div class="final-head">
@@ -803,24 +787,21 @@ function renderFinished(lobby) {
           </div>
           <div class="final-deck">
             ${Array.from({ length: 8 }, (_, index) =>
-              player.deck[index] ? `<div class="final-slot">${cardThumb(player.deck[index], "Deck")}</div>` : `<div class="final-slot empty"></div>`
+              displayDeck[index] ? `<div class="final-slot">${cardThumb(displayDeck[index], "Deck")}</div>` : `<div class="final-slot empty"></div>`
             ).join("")}
           </div>
           <div class="final-actions">
-            <button class="deck-action copy" data-action="copy-deck" data-player-id="${playerId}" ${!canExport ? "disabled" : ""}>
-              ${icon("copy")} Import-Link kopieren
-            </button>
             ${
               canExport
                 ? `<a class="deck-action open" href="${escapeAttr(exportInfo.appLink)}">${icon(
                     "external"
-                  )} In Clash importieren</a>`
-                : `<button class="deck-action open" disabled>${icon("external")} In Clash importieren</button>`
+                  )} In Clash Royale öffnen</a>`
+                : `<button class="deck-action open" disabled>${icon("external")} In Clash Royale öffnen</button>`
             }
           </div>
           <p class="deck-link-note">${
             canExport
-              ? "Kopierten Link ausserhalb von Clash öffnen. Der rechte Button startet den direkten Import."
+              ? "Champions werden fuer den Import automatisch auf Slot 2/3 gelegt."
               : exportInfo.reason
           }</p>
         </article>
@@ -1044,14 +1025,6 @@ function getMe() {
   return state.lobby.players.find((player) => player.id === state.playerId || player.id === state.clientId) || null;
 }
 
-function getPlayerById(playerId) {
-  return state.lobby?.players.find((player) => player.id === playerId) || null;
-}
-
-function buildDeckLink(deck) {
-  return getDeckExportInfo(deck).shareLink;
-}
-
 function getDeckExportInfo(deck) {
   if (!Array.isArray(deck) || deck.length !== 8) {
     return {
@@ -1059,17 +1032,32 @@ function getDeckExportInfo(deck) {
       link: "",
       shareLink: "",
       appLink: "",
+      exportDeck: [],
       reason: "Deck-Link verfügbar, sobald alle 8 Karten fertig sind."
     };
   }
 
-  const cardIds = deck.map((card) => Number(card?.id));
+  const championCount = deck.filter(isChampionCard).length;
+  if (championCount > 2) {
+    return {
+      ok: false,
+      link: "",
+      shareLink: "",
+      appLink: "",
+      exportDeck: [],
+      reason: "Deck-Import nicht möglich: Clash erlaubt maximal 2 Champions in Slot 2/3."
+    };
+  }
+
+  const exportDeck = orderDeckForClashImport(deck);
+  const cardIds = exportDeck.map((card) => Number(card?.id));
   if (cardIds.some((id) => !Number.isInteger(id))) {
     return {
       ok: false,
       link: "",
       shareLink: "",
       appLink: "",
+      exportDeck: [],
       reason: "Deck-Link nicht möglich: Mindestens eine Karte hat keine offizielle Clash-ID."
     };
   }
@@ -1081,18 +1069,8 @@ function getDeckExportInfo(deck) {
       link: "",
       shareLink: "",
       appLink: "",
+      exportDeck: [],
       reason: "Deck-Link nicht möglich: Clash erlaubt keine doppelte Karte im Deck."
-    };
-  }
-
-  const specialSlotCount = deck.filter(isChampionCard).length;
-  if (specialSlotCount > 0) {
-    return {
-      ok: false,
-      link: "",
-      shareLink: "",
-      appLink: "",
-      reason: "Deck-Link nicht möglich: Spezialslot-Karten koennen beim Clash-Import blockieren."
     };
   }
 
@@ -1106,12 +1084,35 @@ function getDeckExportInfo(deck) {
     link: shareLink,
     shareLink,
     appLink,
+    exportDeck,
     reason: ""
   };
 }
 
+function orderDeckForClashImport(deck) {
+  const champions = deck.filter(isChampionCard);
+  if (!champions.length) {
+    return [...deck];
+  }
+
+  const regularCards = deck.filter((card) => !isChampionCard(card));
+  const championSlots = new Map([
+    [1, champions[0]],
+    [2, champions[1]]
+  ]);
+  let regularIndex = 0;
+
+  return Array.from({ length: 8 }, (_, index) => {
+    if (championSlots.has(index) && championSlots.get(index)) {
+      return championSlots.get(index);
+    }
+
+    return regularCards[regularIndex++] || null;
+  }).filter(Boolean);
+}
+
 function canSelectRoundCard(player, card) {
-  return !isChampionCard(card);
+  return !(isChampionCard(card) && getChampionCount(player) >= 2);
 }
 
 function getChampionCount(player) {
