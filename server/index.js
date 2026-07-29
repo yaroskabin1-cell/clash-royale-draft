@@ -43,14 +43,14 @@ const EVENT_CARD_KEYS = new Set([
 const EVENT_CARD_PATTERN = /\b(super|santa|party|raging)\b/i;
 
 const FALLBACK_CARDS = [
-  { key: "knight", name: "Knight", rarity: "common", elixir: 3, type: "Troop" },
-  { key: "archers", name: "Archers", rarity: "common", elixir: 3, type: "Troop" },
-  { key: "fireball", name: "Fireball", rarity: "rare", elixir: 4, type: "Spell" },
-  { key: "minions", name: "Minions", rarity: "common", elixir: 3, type: "Troop" },
-  { key: "giant", name: "Giant", rarity: "rare", elixir: 5, type: "Troop" },
-  { key: "musketeer", name: "Musketeer", rarity: "rare", elixir: 4, type: "Troop" },
-  { key: "hog-rider", name: "Hog Rider", rarity: "rare", elixir: 4, type: "Troop" },
-  { key: "the-log", name: "The Log", rarity: "legendary", elixir: 2, type: "Spell" }
+  { id: 26000000, key: "knight", name: "Knight", rarity: "common", elixir: 3, type: "Troop" },
+  { id: 26000001, key: "archers", name: "Archers", rarity: "common", elixir: 3, type: "Troop" },
+  { id: 28000000, key: "fireball", name: "Fireball", rarity: "rare", elixir: 4, type: "Spell" },
+  { id: 26000005, key: "minions", name: "Minions", rarity: "common", elixir: 3, type: "Troop" },
+  { id: 26000003, key: "giant", name: "Giant", rarity: "rare", elixir: 5, type: "Troop" },
+  { id: 26000014, key: "musketeer", name: "Musketeer", rarity: "rare", elixir: 4, type: "Troop" },
+  { id: 26000021, key: "hog-rider", name: "Hog Rider", rarity: "rare", elixir: 4, type: "Troop" },
+  { id: 28000011, key: "the-log", name: "The Log", rarity: "legendary", elixir: 2, type: "Spell" }
 ].map(normalizeCard);
 
 let cards = [];
@@ -428,8 +428,10 @@ function normalizeCard(card) {
   const name = String(card?.name || card?.displayName || key)
     .replace(/\s+/g, " ")
     .trim();
+  const id = Number(card?.id ?? card?.cardId ?? card?.card_id);
 
   return {
+    id: Number.isInteger(id) ? id : null,
     key,
     name,
     rarity: String(card?.rarity || "common").toLowerCase(),
@@ -450,10 +452,12 @@ function isStandardPlayableCard(card) {
   const type = String(card?.type || "").trim().toLowerCase();
   const arena = Number(card?.arena);
   const elixir = Number(card?.elixir ?? card?.elixirCost);
+  const id = Number(card?.id ?? card?.cardId ?? card?.card_id);
   const combinedName = `${key} ${name} ${scKey}`;
 
   return (
     key &&
+    Number.isInteger(id) &&
     name &&
     STANDARD_RARITIES.has(rarity) &&
     STANDARD_TYPES.has(type) &&

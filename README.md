@@ -54,9 +54,14 @@ Use a Node/WebSocket host such as Render, Railway, Fly.io, or a VPS. Static host
 - Players who do not win their target receive one random leftover card from the round pool.
 - Every player receives exactly one card per round and finishes with an 8-card deck.
 - All eight rounds accept picks before the final deck evaluation begins.
+- Finished decks can be copied as Clash Royale deck links or opened directly in Clash Royale on mobile.
 
 ## Elixir Heist Tactics
 
 - `Steal`: Available from round 5. When used, your chosen value card is permanently blocked for all opponents.
 - `Shield`: Your targeted card is protected. Normal higher bids cannot beat it.
 - `Gamble`: Your bid counts as +2 for the reveal. If you miss your targeted card, your next round is forced to your lowest available value card.
+
+## Render Schedule
+
+The GitHub Actions workflow `.github/workflows/render-schedule.yml` can resume or suspend the Render service manually. It also runs daily at 11:07 and 16:07 Europe/Berlin time. The minute is intentionally offset from `:00` because GitHub scheduled workflows can be delayed or dropped during top-of-hour load.

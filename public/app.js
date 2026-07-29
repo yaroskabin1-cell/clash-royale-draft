@@ -134,6 +134,17 @@ document.addEventListener("click", async (event) => {
     copyText(spectatorUrl(), "Zuschauer-Link kopiert");
   }
 
+  if (action === "copy-deck") {
+    const player = getPlayerById(button.dataset.playerId);
+    const deckLink = buildDeckLink(player?.deck || []);
+    if (!deckLink) {
+      state.error = "Dieses Deck kann noch nicht als Clash-Link exportiert werden.";
+      render();
+      return;
+    }
+    await copyText(deckLink, "Clash-Deck-Link kopiert");
+  }
+
   if (action === "start") {
     await emitCommand("startGame", { code: state.code, clientId: state.clientId });
   }
@@ -744,8 +755,12 @@ function renderFinished(lobby) {
   const isHost = getMe()?.isHost;
   const rows = lobby.players
     .map(
-      (player) => `
-        <article class="final-card">
+      (player) => {
+        const deckLink = buildDeckLink(player.deck);
+        const canExport = Boolean(deckLink);
+        const playerId = escapeAttr(player.id);
+        return `
+        <article class="final-card ${player.id === state.playerId ? "self" : ""}">
           <div class="final-head">
             <strong>${escapeHtml(player.name)}</strong>
             <span>${player.deck.length}/8 Karten</span>
@@ -755,8 +770,26 @@ function renderFinished(lobby) {
               player.deck[index] ? `<div class="final-slot">${cardThumb(player.deck[index], "Deck")}</div>` : `<div class="final-slot empty"></div>`
             ).join("")}
           </div>
+          <div class="final-actions">
+            <button class="deck-action copy" data-action="copy-deck" data-player-id="${playerId}" ${!canExport ? "disabled" : ""}>
+              ${icon("copy")} Link kopieren
+            </button>
+            ${
+              canExport
+                ? `<a class="deck-action open" href="${escapeAttr(deckLink)}" target="_blank" rel="noopener">${icon(
+                    "external"
+                  )} In Clash öffnen</a>`
+                : `<button class="deck-action open" disabled>${icon("external")} In Clash öffnen</button>`
+            }
+          </div>
+          <p class="deck-link-note">${
+            canExport
+              ? "Öffnet auf dem Handy direkt den Clash-Royale-Deckimport."
+              : "Deck-Link verfügbar, sobald alle 8 Karten offizielle IDs haben."
+          }</p>
         </article>
-      `
+      `;
+      }
     )
     .join("");
 
@@ -953,6 +986,23 @@ function getMe() {
   return state.lobby.players.find((player) => player.id === state.playerId || player.id === state.clientId) || null;
 }
 
+function getPlayerById(playerId) {
+  return state.lobby?.players.find((player) => player.id === playerId) || null;
+}
+
+function buildDeckLink(deck) {
+  if (!Array.isArray(deck) || deck.length !== 8) {
+    return "";
+  }
+
+  const cardIds = deck.map((card) => Number(card?.id));
+  if (cardIds.some((id) => !Number.isInteger(id))) {
+    return "";
+  }
+
+  return `https://link.clashroyale.com/deck/en?deck=${cardIds.join(";")}`;
+}
+
 function getRoundCards(lobby) {
   if (Array.isArray(lobby.currentCards) && lobby.currentCards.length) {
     return lobby.currentCards;
@@ -1078,6 +1128,7 @@ function icon(name) {
     copy: `<rect width="13" height="13" x="9" y="9" rx="2"/><rect width="13" height="13" x="2" y="2" rx="2"/>`,
     crown: `<path d="m2 8 4 9h12l4-9-6 4-4-7-4 7-6-4z"/><path d="M6 21h12"/>`,
     eye: `<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`,
+    external: `<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>`,
     link: `<path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L10.9 5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07L13.1 19"/>`,
     refresh: `<path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 12A9 9 0 0 1 18.5 5.8"/><path d="M3 19v-6h6"/><path d="M21 5v6h-6"/>`,
     swords: `<path d="m14.5 17.5 3 3 3-3-3-3"/><path d="M13 19 21 3"/><path d="m9.5 17.5-3 3-3-3 3-3"/><path d="M11 19 3 3"/>`,
