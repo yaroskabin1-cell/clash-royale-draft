@@ -18,7 +18,7 @@ const MAX_ROUNDS = 8;
 const MAX_BID = 10;
 const ROUND_CARD_COUNT = 4;
 const ROUND_DURATION_MS = 15 * 1000;
-const MAX_CHAMPIONS_PER_DECK = 1;
+const MAX_CHAMPIONS_PER_DECK = 0;
 const STEAL_UNLOCK_ROUND = Math.floor(MAX_ROUNDS / 2) + 1;
 const LOBBY_TTL_MS = 4 * 60 * 60 * 1000;
 const HEIST_TACTICS = new Map([
@@ -26,7 +26,7 @@ const HEIST_TACTICS = new Map([
   ["shield", { key: "shield", label: "Shield" }],
   ["gamble", { key: "gamble", label: "Gamble" }]
 ]);
-const STANDARD_RARITIES = new Set(["common", "rare", "epic", "legendary", "champion"]);
+const STANDARD_RARITIES = new Set(["common", "rare", "epic", "legendary"]);
 const STANDARD_TYPES = new Set(["troop", "building", "spell"]);
 const EVENT_CARD_KEYS = new Set([
   "party-hut",
@@ -243,7 +243,7 @@ io.on("connection", (socket) => {
       }
 
       if (!canPlayerReceiveCard(player, targetCard)) {
-        throw new Error("Du hast bereits einen Champion. Waehle eine andere Karte.");
+        throw new Error("Diese Karte nutzt Spezialslots und kann nicht sauber importiert werden.");
       }
 
       if ((player.usedBids || []).includes(bid)) {
@@ -625,7 +625,7 @@ function resolveRound(lobby) {
     if (!fallbackCard) {
       fallbackCard = drawReplacementCard(lobby, player, obtainedKeys);
       if (fallbackCard) {
-        entry.effect = appendEffect(entry.effect, "Ersatzkarte wegen Champion-Limit");
+        entry.effect = appendEffect(entry.effect, "Ersatzkarte wegen Import-Limit");
       }
     }
 

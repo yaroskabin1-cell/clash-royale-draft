@@ -146,7 +146,11 @@ document.addEventListener("click", async (event) => {
       render();
       return;
     }
-    await copyText(exportInfo.link, "Clash-Deck-Link kopiert");
+    await copyText(exportInfo.shareLink, "Import-Link kopiert", {
+      sheetText:
+        "Falls dein Browser die Zwischenablage blockiert: Link manuell kopieren und aus Safari, Chrome oder einem Chat heraus öffnen.",
+      openLink: exportInfo.appLink
+    });
     return;
   }
 
@@ -616,10 +620,10 @@ function renderBidding(lobby, me) {
         }" data-action="select-card" data-card-key="${escapeAttr(
           card.key
         )}" ${!canChoose || state.pending || championLocked ? "disabled" : ""} title="${
-          championLocked ? "Champion-Limit erreicht" : ""
+          championLocked ? "Spezialslot-Karte ist fuer den Import deaktiviert" : ""
         }">
           <span class="selection-card-frame">${cardThumb(card, "Runden-Pool")}</span>
-          ${championLocked ? `<span class="selection-lock">Champion-Limit</span>` : ""}
+          ${championLocked ? `<span class="selection-lock">Import-Limit</span>` : ""}
         </button>
       `;
       }
@@ -804,19 +808,19 @@ function renderFinished(lobby) {
           </div>
           <div class="final-actions">
             <button class="deck-action copy" data-action="copy-deck" data-player-id="${playerId}" ${!canExport ? "disabled" : ""}>
-              ${icon("copy")} Link kopieren
+              ${icon("copy")} Import-Link kopieren
             </button>
             ${
               canExport
-                ? `<a class="deck-action open" href="${escapeAttr(exportInfo.link)}" target="_blank" rel="noopener">${icon(
+                ? `<a class="deck-action open" href="${escapeAttr(exportInfo.appLink)}">${icon(
                     "external"
-                  )} In Clash öffnen</a>`
-                : `<button class="deck-action open" disabled>${icon("external")} In Clash öffnen</button>`
+                  )} In Clash importieren</a>`
+                : `<button class="deck-action open" disabled>${icon("external")} In Clash importieren</button>`
             }
           </div>
           <p class="deck-link-note">${
             canExport
-              ? "Clash-kompatibler Link mit Deckslots. Auf dem Handy direkt importieren."
+              ? "Kopierten Link ausserhalb von Clash öffnen. Der rechte Button startet den direkten Import."
               : exportInfo.reason
           }</p>
         </article>
@@ -884,15 +888,18 @@ function cardThumb(card, label) {
 function renderCopySheet() {
   if (!state.copySheet) return "";
   const text = state.copySheet.text || "";
+  const sheetText =
+    state.copySheet.sheetText || "Dein Browser hat die Zwischenablage blockiert. Markiere den Link und kopiere ihn manuell.";
+  const openLink = state.copySheet.openLink || text;
   return `
     <div class="copy-sheet-backdrop">
       <section class="copy-sheet" role="dialog" aria-modal="true" aria-label="Link manuell kopieren">
         <h2>Link manuell kopieren</h2>
-        <p>Dein Browser hat die Zwischenablage blockiert. Markiere den Link und kopiere ihn manuell.</p>
+        <p>${escapeHtml(sheetText)}</p>
         <textarea data-copy-sheet-text readonly>${escapeHtml(text)}</textarea>
         <div class="copy-sheet-actions">
           <button class="deck-action copy" data-action="select-copy-text">${icon("copy")} Text markieren</button>
-          <a class="deck-action open" href="${escapeAttr(text)}" target="_blank" rel="noopener">${icon("external")} Öffnen</a>
+          <a class="deck-action open" href="${escapeAttr(openLink)}">${icon("external")} In Clash</a>
           <button class="deck-action" data-action="close-copy-sheet">Schließen</button>
         </div>
       </section>
@@ -1042,7 +1049,7 @@ function getPlayerById(playerId) {
 }
 
 function buildDeckLink(deck) {
-  return getDeckExportInfo(deck).link;
+  return getDeckExportInfo(deck).shareLink;
 }
 
 function getDeckExportInfo(deck) {
@@ -1050,6 +1057,8 @@ function getDeckExportInfo(deck) {
     return {
       ok: false,
       link: "",
+      shareLink: "",
+      appLink: "",
       reason: "Deck-Link verfügbar, sobald alle 8 Karten fertig sind."
     };
   }
@@ -1059,6 +1068,8 @@ function getDeckExportInfo(deck) {
     return {
       ok: false,
       link: "",
+      shareLink: "",
+      appLink: "",
       reason: "Deck-Link nicht möglich: Mindestens eine Karte hat keine offizielle Clash-ID."
     };
   }
@@ -1068,29 +1079,39 @@ function getDeckExportInfo(deck) {
     return {
       ok: false,
       link: "",
+      shareLink: "",
+      appLink: "",
       reason: "Deck-Link nicht möglich: Clash erlaubt keine doppelte Karte im Deck."
     };
   }
 
-  const championCount = deck.filter(isChampionCard).length;
-  if (championCount > 1) {
+  const specialSlotCount = deck.filter(isChampionCard).length;
+  if (specialSlotCount > 0) {
     return {
       ok: false,
       link: "",
-      reason: "Dieses Deck hat mehrere Champions. Clash übernimmt solche Decks nicht zuverlässig."
+      shareLink: "",
+      appLink: "",
+      reason: "Deck-Link nicht möglich: Spezialslot-Karten koennen beim Clash-Import blockieren."
     };
   }
 
   const slots = cardIds.map(() => 0).join(";");
+  const deckParam = cardIds.join(";");
+  const appLink = `clashroyale://copyDeck?deck=${deckParam}&slots=${slots}&tt=159000000&l=Royals`;
+  const shareLink = `https://link.clashroyale.com/en?${appLink}`;
+
   return {
     ok: true,
-    link: `https://link.clashroyale.com/deck/de?deck=${cardIds.join(";")}&slots=${slots}`,
+    link: shareLink,
+    shareLink,
+    appLink,
     reason: ""
   };
 }
 
 function canSelectRoundCard(player, card) {
-  return !(isChampionCard(card) && getChampionCount(player) >= 1);
+  return !isChampionCard(card);
 }
 
 function getChampionCount(player) {
@@ -1155,7 +1176,7 @@ function spectatorUrl() {
   return `${window.location.origin}/?spectate=${state.code}`;
 }
 
-async function copyText(text, label) {
+async function copyText(text, label, options = {}) {
   let copied = false;
 
   try {
@@ -1172,7 +1193,11 @@ async function copyText(text, label) {
   }
 
   if (!copied) {
-    state.copySheet = { text };
+    state.copySheet = {
+      text,
+      sheetText: options.sheetText || "",
+      openLink: options.openLink || ""
+    };
     state.toast = "";
     render();
     return false;
