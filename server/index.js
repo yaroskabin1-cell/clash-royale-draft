@@ -18,6 +18,7 @@ const MAX_ROUNDS = 8;
 const MAX_BID = 10;
 const ROUND_CARD_COUNT = 4;
 const ROUND_DURATION_MS = 15 * 1000;
+const MAX_CHAMPIONS_PER_DECK = 1;
 const STEAL_UNLOCK_ROUND = Math.floor(MAX_ROUNDS / 2) + 1;
 const LOBBY_TTL_MS = 4 * 60 * 60 * 1000;
 const HEIST_TACTICS = new Map([
@@ -241,6 +242,10 @@ io.on("connection", (socket) => {
         throw new Error("Waehle zuerst eine Karte aus dem Kartenpool.");
       }
 
+      if (!canPlayerReceiveCard(player, targetCard)) {
+        throw new Error("Du hast bereits einen Champion. Waehle eine andere Karte.");
+      }
+
       if ((player.usedBids || []).includes(bid)) {
         throw new Error(`Die ${bid} hast du bereits benutzt.`);
       }
@@ -440,6 +445,7 @@ function normalizeCard(card) {
       : null,
     type: String(card?.type || "card"),
     arena: Number.isFinite(Number(card?.arena)) ? Number(card.arena) : null,
+    isChampion: String(card?.rarity || "").trim().toLowerCase() === "champion",
     image: `${CARD_IMAGE_BASE}/${key}.png`
   };
 }
@@ -584,7 +590,10 @@ function resolveRound(lobby) {
   }
 
   for (const card of lobby.currentCards) {
-    const targetedEntries = bidEntries.filter((entry) => entry.selectedCard?.key === card.key);
+    const targetedEntries = bidEntries.filter((entry) => {
+      const player = lobby.players.get(entry.playerId);
+      return entry.selectedCard?.key === card.key && canPlayerReceiveCard(player, card);
+    });
     if (!targetedEntries.length) {
       continue;
     }
@@ -610,7 +619,16 @@ function resolveRound(lobby) {
       continue;
     }
 
-    const fallbackCard = fallbackCards.shift();
+    const player = lobby.players.get(entry.playerId);
+    const fallbackIndex = fallbackCards.findIndex((card) => canPlayerReceiveCard(player, card));
+    let fallbackCard = fallbackIndex >= 0 ? fallbackCards.splice(fallbackIndex, 1)[0] : null;
+    if (!fallbackCard) {
+      fallbackCard = drawReplacementCard(lobby, player, obtainedKeys);
+      if (fallbackCard) {
+        entry.effect = appendEffect(entry.effect, "Ersatzkarte wegen Champion-Limit");
+      }
+    }
+
     if (fallbackCard) {
       entry.receivedCard = fallbackCard;
       entry.fallback = true;
@@ -711,12 +729,69 @@ function finishLobby(lobby) {
 function drawCards(lobby, count) {
   const drawn = [];
   while (drawn.length < count) {
-    if (!lobby.cardPool.length) {
-      lobby.cardPool = shuffle(cards.length ? cards : FALLBACK_CARDS);
+    const roundHasChampion = drawn.some(isChampionCard);
+    const card = drawCardFromPool(lobby, (candidate) => !roundHasChampion || !isChampionCard(candidate));
+    if (card) {
+      drawn.push(card);
     }
-    drawn.push(lobby.cardPool.shift());
   }
   return drawn;
+}
+
+function drawCardFromPool(lobby, predicate, options = {}) {
+  const strict = Boolean(options.strict);
+  const allCards = cards.length ? cards : FALLBACK_CARDS;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!lobby.cardPool.length) {
+      lobby.cardPool = shuffle(allCards);
+    }
+
+    const index = typeof predicate === "function" ? lobby.cardPool.findIndex(predicate) : 0;
+    if (index >= 0) {
+      return lobby.cardPool.splice(index, 1)[0];
+    }
+
+    if (!strict) {
+      return lobby.cardPool.shift() || null;
+    }
+
+    lobby.cardPool = shuffle(allCards);
+  }
+
+  return null;
+}
+
+function drawReplacementCard(lobby, player, obtainedKeys) {
+  return drawCardFromPool(
+    lobby,
+    (card) => card?.key && !obtainedKeys.has(card.key) && canPlayerReceiveCard(player, card),
+    { strict: true }
+  );
+}
+
+function canPlayerReceiveCard(player, card) {
+  if (!player || !card) {
+    return false;
+  }
+
+  if (isChampionCard(card) && getChampionCount(player) >= MAX_CHAMPIONS_PER_DECK) {
+    return false;
+  }
+
+  return true;
+}
+
+function getChampionCount(player) {
+  return (player?.deck || []).filter(isChampionCard).length;
+}
+
+function isChampionCard(card) {
+  return Boolean(card?.isChampion || String(card?.rarity || "").toLowerCase() === "champion");
+}
+
+function appendEffect(current, addition) {
+  return current ? `${current} · ${addition}` : addition;
 }
 
 function getRoundCard(lobby, cardKey) {

@@ -3462,3 +3462,91 @@ input:focus {
     min-height: 42px;
   }
 }
+
+/* Reliable deck copy fallback */
+.selection-card.locked-card {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+
+.selection-lock {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 4px;
+  display: grid;
+  place-items: center;
+  min-height: 20px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.86);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.copy-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.copy-sheet {
+  width: min(560px, 100%);
+  padding: 18px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+  color: #111827;
+}
+
+.copy-sheet h2 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 21px;
+}
+
+.copy-sheet p {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.copy-sheet textarea {
+  width: 100%;
+  min-height: 116px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: var(--radius);
+  background: #f8fafc;
+  color: #111827;
+  font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  resize: vertical;
+}
+
+.copy-sheet-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .copy-sheet-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-sheet {
+    align-self: end;
+  }
+}

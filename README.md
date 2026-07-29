@@ -54,7 +54,8 @@ Use a Node/WebSocket host such as Render, Railway, Fly.io, or a VPS. Static host
 - Players who do not win their target receive one random leftover card from the round pool.
 - Every player receives exactly one card per round and finishes with an 8-card deck.
 - All eight rounds accept picks before the final deck evaluation begins.
-- Finished decks can be copied as Clash Royale deck links or opened directly in Clash Royale on mobile.
+- Finished decks can be copied as Clash Royale deck links with explicit deck slots or opened directly in Clash Royale on mobile.
+- Draft decks are kept Clash-import compatible by limiting each player to at most one Champion.
 
 ## Elixir Heist Tactics
 

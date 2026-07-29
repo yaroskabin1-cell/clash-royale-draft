@@ -20,6 +20,7 @@ const state = {
   selectedBid: null,
   selectedCardKey: null,
   selectedTactic: null,
+  copySheet: null,
   bootLobbyCode: inviteCode,
   bootSpectatorCode: spectatorCode
 };
@@ -63,7 +64,7 @@ socket.on("lobbyState", (lobby) => {
   if (
     lobby.status === "bidding" &&
     state.selectedCardKey &&
-    !getRoundCards(lobby).some((card) => card.key === state.selectedCardKey)
+    !getRoundCards(lobby).some((card) => card.key === state.selectedCardKey && canSelectRoundCard(getMe(), card))
   ) {
     state.selectedCardKey = null;
   }
@@ -123,26 +124,47 @@ document.addEventListener("click", async (event) => {
   const action = button.dataset.action;
 
   if (action === "copy-invite") {
-    copyText(inviteUrl(), "Invite-Link kopiert");
+    await copyText(inviteUrl(), "Invite-Link kopiert");
+    return;
   }
 
   if (action === "copy-code") {
-    copyText(state.code, "Lobby-Code kopiert");
+    await copyText(state.code, "Lobby-Code kopiert");
+    return;
   }
 
   if (action === "copy-spectator") {
-    copyText(spectatorUrl(), "Zuschauer-Link kopiert");
+    await copyText(spectatorUrl(), "Zuschauer-Link kopiert");
+    return;
   }
 
   if (action === "copy-deck") {
     const player = getPlayerById(button.dataset.playerId);
-    const deckLink = buildDeckLink(player?.deck || []);
-    if (!deckLink) {
-      state.error = "Dieses Deck kann noch nicht als Clash-Link exportiert werden.";
+    const exportInfo = getDeckExportInfo(player?.deck || []);
+    if (!exportInfo.ok) {
+      state.error = exportInfo.reason || "Dieses Deck kann noch nicht als Clash-Link exportiert werden.";
       render();
       return;
     }
-    await copyText(deckLink, "Clash-Deck-Link kopiert");
+    await copyText(exportInfo.link, "Clash-Deck-Link kopiert");
+    return;
+  }
+
+  if (action === "close-copy-sheet") {
+    state.copySheet = null;
+    state.error = "";
+    render();
+    return;
+  }
+
+  if (action === "select-copy-text") {
+    const copyField = document.querySelector("[data-copy-sheet-text]");
+    if (copyField) {
+      copyField.focus();
+      copyField.select();
+      copyField.setSelectionRange?.(0, copyField.value.length);
+    }
+    return;
   }
 
   if (action === "start") {
@@ -170,7 +192,8 @@ document.addEventListener("click", async (event) => {
 
   if (action === "select-card") {
     const me = getMe();
-    if (!me || me.bidLocked || state.pending) {
+    const card = getRoundCards(state.lobby).find((roundCard) => roundCard.key === button.dataset.cardKey);
+    if (!me || me.bidLocked || state.pending || !canSelectRoundCard(me, card)) {
       return;
     }
     state.selectedCardKey = button.dataset.cardKey;
@@ -379,6 +402,7 @@ function renderGame() {
         ${renderStageBody(lobby, me)}
       </main>
       ${renderToast()}
+      ${renderCopySheet()}
     </div>
   `;
 }
@@ -584,13 +608,21 @@ function renderBidding(lobby, me) {
   }).join("");
   const poolCards = cards
     .map(
-      (card) => `
-        <button class="selection-card ${state.selectedCardKey === card.key ? "selected" : ""}" data-action="select-card" data-card-key="${escapeAttr(
+      (card) => {
+        const championLocked = !canSelectRoundCard(me, card);
+        return `
+        <button class="selection-card ${state.selectedCardKey === card.key ? "selected" : ""} ${
+          championLocked ? "locked-card" : ""
+        }" data-action="select-card" data-card-key="${escapeAttr(
           card.key
-        )}" ${!canChoose || state.pending ? "disabled" : ""}>
+        )}" ${!canChoose || state.pending || championLocked ? "disabled" : ""} title="${
+          championLocked ? "Champion-Limit erreicht" : ""
+        }">
           <span class="selection-card-frame">${cardThumb(card, "Runden-Pool")}</span>
+          ${championLocked ? `<span class="selection-lock">Champion-Limit</span>` : ""}
         </button>
-      `
+      `;
+      }
     )
     .join("");
   const tactics = getTacticOptions()
@@ -756,8 +788,8 @@ function renderFinished(lobby) {
   const rows = lobby.players
     .map(
       (player) => {
-        const deckLink = buildDeckLink(player.deck);
-        const canExport = Boolean(deckLink);
+        const exportInfo = getDeckExportInfo(player.deck);
+        const canExport = exportInfo.ok;
         const playerId = escapeAttr(player.id);
         return `
         <article class="final-card ${player.id === state.playerId ? "self" : ""}">
@@ -776,7 +808,7 @@ function renderFinished(lobby) {
             </button>
             ${
               canExport
-                ? `<a class="deck-action open" href="${escapeAttr(deckLink)}" target="_blank" rel="noopener">${icon(
+                ? `<a class="deck-action open" href="${escapeAttr(exportInfo.link)}" target="_blank" rel="noopener">${icon(
                     "external"
                   )} In Clash öffnen</a>`
                 : `<button class="deck-action open" disabled>${icon("external")} In Clash öffnen</button>`
@@ -784,8 +816,8 @@ function renderFinished(lobby) {
           </div>
           <p class="deck-link-note">${
             canExport
-              ? "Öffnet auf dem Handy direkt den Clash-Royale-Deckimport."
-              : "Deck-Link verfügbar, sobald alle 8 Karten offizielle IDs haben."
+              ? "Clash-kompatibler Link mit Deckslots. Auf dem Handy direkt importieren."
+              : exportInfo.reason
           }</p>
         </article>
       `;
@@ -847,6 +879,25 @@ function cardThumb(card, label) {
   return `<img class="card-img" src="${escapeAttr(card.image)}" alt="${escapeAttr(`${label}: ${card.name}`)}" title="${escapeAttr(
     card.name
   )}" loading="lazy" />`;
+}
+
+function renderCopySheet() {
+  if (!state.copySheet) return "";
+  const text = state.copySheet.text || "";
+  return `
+    <div class="copy-sheet-backdrop">
+      <section class="copy-sheet" role="dialog" aria-modal="true" aria-label="Link manuell kopieren">
+        <h2>Link manuell kopieren</h2>
+        <p>Dein Browser hat die Zwischenablage blockiert. Markiere den Link und kopiere ihn manuell.</p>
+        <textarea data-copy-sheet-text readonly>${escapeHtml(text)}</textarea>
+        <div class="copy-sheet-actions">
+          <button class="deck-action copy" data-action="select-copy-text">${icon("copy")} Text markieren</button>
+          <a class="deck-action open" href="${escapeAttr(text)}" target="_blank" rel="noopener">${icon("external")} Öffnen</a>
+          <button class="deck-action" data-action="close-copy-sheet">Schließen</button>
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 function renderAlert() {
@@ -991,16 +1042,63 @@ function getPlayerById(playerId) {
 }
 
 function buildDeckLink(deck) {
+  return getDeckExportInfo(deck).link;
+}
+
+function getDeckExportInfo(deck) {
   if (!Array.isArray(deck) || deck.length !== 8) {
-    return "";
+    return {
+      ok: false,
+      link: "",
+      reason: "Deck-Link verfügbar, sobald alle 8 Karten fertig sind."
+    };
   }
 
   const cardIds = deck.map((card) => Number(card?.id));
   if (cardIds.some((id) => !Number.isInteger(id))) {
-    return "";
+    return {
+      ok: false,
+      link: "",
+      reason: "Deck-Link nicht möglich: Mindestens eine Karte hat keine offizielle Clash-ID."
+    };
   }
 
-  return `https://link.clashroyale.com/deck/en?deck=${cardIds.join(";")}`;
+  const duplicateIds = cardIds.filter((id, index) => cardIds.indexOf(id) !== index);
+  if (duplicateIds.length) {
+    return {
+      ok: false,
+      link: "",
+      reason: "Deck-Link nicht möglich: Clash erlaubt keine doppelte Karte im Deck."
+    };
+  }
+
+  const championCount = deck.filter(isChampionCard).length;
+  if (championCount > 1) {
+    return {
+      ok: false,
+      link: "",
+      reason: "Dieses Deck hat mehrere Champions. Clash übernimmt solche Decks nicht zuverlässig."
+    };
+  }
+
+  const slots = cardIds.map(() => 0).join(";");
+  return {
+    ok: true,
+    link: `https://link.clashroyale.com/deck/de?deck=${cardIds.join(";")}&slots=${slots}`,
+    reason: ""
+  };
+}
+
+function canSelectRoundCard(player, card) {
+  return !(isChampionCard(card) && getChampionCount(player) >= 1);
+}
+
+function getChampionCount(player) {
+  return (player?.deck || []).filter(isChampionCard).length;
+}
+
+function isChampionCard(card) {
+  return Boolean(card?.isChampion || String(card?.rarity || "").toLowerCase() === "champion");
 }
 
 function getRoundCards(lobby) {
@@ -1058,25 +1156,59 @@ function spectatorUrl() {
 }
 
 async function copyText(text, label) {
+  let copied = false;
+
   try {
-    await navigator.clipboard.writeText(text);
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
   } catch (_error) {
-    const input = document.createElement("textarea");
-    input.value = text;
-    input.setAttribute("readonly", "");
-    input.style.position = "fixed";
-    input.style.opacity = "0";
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    input.remove();
+    copied = false;
   }
+
+  if (!copied) {
+    copied = fallbackCopyText(text);
+  }
+
+  if (!copied) {
+    state.copySheet = { text };
+    state.toast = "";
+    render();
+    return false;
+  }
+
+  state.copySheet = null;
   state.toast = label;
   render();
   window.setTimeout(() => {
     state.toast = "";
     render();
   }, 1600);
+  return true;
+}
+
+function fallbackCopyText(text) {
+  try {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.top = "0";
+    input.style.left = "-9999px";
+    input.style.width = "1px";
+    input.style.height = "1px";
+    input.style.fontSize = "16px";
+    document.body.appendChild(input);
+    input.focus();
+    input.select();
+    input.setSelectionRange?.(0, input.value.length);
+    const copied = document.execCommand("copy");
+    input.remove();
+    return copied;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function getClientId() {
