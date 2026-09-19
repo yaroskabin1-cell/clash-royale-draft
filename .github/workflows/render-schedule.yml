@@ -1,12 +1,15 @@
 name: Render Scheduled Server Toggle
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/render-schedule.yml"
   schedule:
-    # Avoid minute 0 because GitHub can drop scheduled jobs during top-of-hour load.
-    - cron: "7 11 * * *"
-      timezone: "Europe/Berlin"
-    - cron: "7 16 * * *"
-      timezone: "Europe/Berlin"
+    # GitHub cron is UTC. Run around both DST offsets and let the step below
+    # decide by the real Europe/Berlin hour.
+    - cron: "7 9,10,14,15 * * *"
   workflow_dispatch:
     inputs:
       action:
@@ -27,6 +30,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "action=resume" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
